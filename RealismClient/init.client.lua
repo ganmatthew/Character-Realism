@@ -16,6 +16,10 @@ local FirstPerson = require(script.FirstPerson)
 local XZ_VECTOR3 = Vector3.new(1, 0, 1)
 
 local Config = require(script.Config) :: {
+	MaxVolume: {
+		[string]: number,
+	},
+
 	Sounds: {
 		[string]: number,
 	},
@@ -418,7 +422,7 @@ end
 -- Mounts the custom material walking
 -- sounds into the provided humanoid.
 
-function module.MountMaterialSounds(humanoid: Instance)
+function module.MountMaterialSounds(humanoid: Humanoid)
 	if not humanoid:IsA("Humanoid") then
 		return
 	end
@@ -426,21 +430,29 @@ function module.MountMaterialSounds(humanoid: Instance)
 	local character = assert(humanoid.Parent)
 	local running: Sound?
 
-	local maxVolume: number = 0.7 -- default max volume value
+	local maxVolume = 0.7 -- default max volume value
 
 	local function raycastToFloor()
 		FloorRayParams.FilterType = Enum.RaycastFilterType.Exclude
 		FloorRayParams.FilterDescendantsInstances = { character }
 		FloorRayParams.IgnoreWater = true
 		
-		local result: RaycastResult = workspace:Raycast(humanoid.RootPart.CFrame.Position + Vector3.new(0, 5, 0), Vector3.new(0,-15,0), FloorRayParams)
-		-- Use custom material if it exists, otherwise use the material of the surface
-		if result then
-			if result.Instance.CanCollide and result.Instance.CanTouch and result.Instance.Transparency < 1 then
-				--print(result.Instance.Name)
-				return result.Instance:GetAttribute("CustomMaterial") or result.Material.Name
-			end
+		local rootPart: BasePart = humanoid.RootPart
+		if not rootPart then 
+			return 
 		end
+
+		-- Use custom material if it exists, otherwise use the material of the surface
+		local result: RaycastResult = workspace:Raycast(rootPart.CFrame.Position + Vector3.new(0, 5, 0), Vector3.new(0,-15,0), FloorRayParams)		
+		if not result then
+			return
+		end 
+
+		local resPart: BasePart = result.Instance
+		if resPart.CanCollide and resPart.CanTouch and resPart.Transparency < 1 then
+			--print(result.Instance.Name)
+			return resPart:GetAttribute("CustomMaterial") or result.Material.Name
+		end	
 	end
 
 	local function updateRunningSoundId()
@@ -502,9 +514,11 @@ function module.MountMaterialSounds(humanoid: Instance)
 
 	-- TODO: Tie these to a maid!
 	humanoid:GetPropertyChangedSignal("FloorMaterial"):Connect(updateRunningSoundId)
-	running.RollOffMode = Enum.RollOffMode.Linear
-	running.RollOffMinDistance = 0
-	running.RollOffMaxDistance = 50
+	if running then
+		running.RollOffMode = Enum.RollOffMode.Linear
+		running.RollOffMinDistance = 0
+		running.RollOffMaxDistance = 50
+	end
 
 	task.spawn(onStateChanged, nil, humanoid:GetState())
 
