@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
--- MaximumADHD, 2020
+-- Originally made bv MaximumADHD, 2020
 -- Realism Client
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 -- Dependencies
@@ -31,9 +31,20 @@ local Config = require(script.Config) :: {
 		},
 	},
 
+	-- Toggles whether or not the
+	-- player's head follows the mouse
+	-- cursor only while using tools
+	FollowCursorWithToolsOnly: boolean?,
+	-- Toggles whether or not the
+	-- player's arms and legs can be
+	-- seen while in first person
+	ShowLimbsInFirstPerson: boolean?,
+	
 	SkipLookAngle: boolean?,
 	SkipMaterialSounds: boolean?,
 }
+
+local FloorRayParams: RaycastParams = RaycastParams.new()
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 -- Main Logic
@@ -415,9 +426,30 @@ function module.MountMaterialSounds(humanoid: Instance)
 	local character = assert(humanoid.Parent)
 	local running: Sound?
 
+	local maxVolume: number = 0.7 -- default max volume value
+
+	local function raycastToFloor()
+		FloorRayParams.FilterType = Enum.RaycastFilterType.Exclude
+		FloorRayParams.FilterDescendantsInstances = { character }
+		FloorRayParams.IgnoreWater = true
+		
+		local result: RaycastResult = workspace:Raycast(humanoid.RootPart.CFrame.Position + Vector3.new(0, 5, 0), Vector3.new(0,-15,0), FloorRayParams)
+		-- Use custom material if it exists, otherwise use the material of the surface
+		if result then
+			if result.Instance.CanCollide and result.Instance.CanTouch and result.Instance.Transparency < 1 then
+				--print(result.Instance.Name)
+				return result.Instance:GetAttribute("CustomMaterial") or result.Material.Name
+			end
+		end
+	end
+
 	local function updateRunningSoundId()
 		local soundId = Config.Sounds.Concrete
-		local material = humanoid.FloorMaterial.Name
+		local material = raycastToFloor()
+
+		if Config.MaxVolume[material] then
+			maxVolume = Config.MaxVolume[material]
+		end
 
 		if not Config.Sounds[material] then
 			material = Config.MaterialMap[material]
@@ -465,13 +497,20 @@ function module.MountMaterialSounds(humanoid: Instance)
 		end
 	end
 
+	-- Fire for the first time
+	updateRunningSoundId()
+
 	-- TODO: Tie these to a maid!
-	local floorChanged = humanoid:GetPropertyChangedSignal("FloorMaterial")
+	humanoid:GetPropertyChangedSignal("FloorMaterial"):Connect(updateRunningSoundId)
+	running.RollOffMode = Enum.RollOffMode.Linear
+	running.RollOffMinDistance = 0
+	running.RollOffMaxDistance = 50
+
 	task.spawn(onStateChanged, nil, humanoid:GetState())
 
 	character.DescendantAdded:Connect(onDescendantAdded)
 	humanoid.StateChanged:Connect(onStateChanged)
-	floorChanged:Connect(updateRunningSoundId)
+	onStateChanged(nil, Enum.HumanoidStateType.Running)
 end
 
 -- Called when the RealismHook tag is added to a
